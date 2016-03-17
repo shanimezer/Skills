@@ -327,5 +327,5 @@ public class MyBot implements PirateBot{
         }
         possibleLocations = game.getSailOptions(t1.pirate, t1.finalDestination, 1);
         t1.tempDestination = possibleLocations.get(0);
-    }
+    }//try
 }
