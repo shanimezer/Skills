@@ -8,10 +8,7 @@ import pirates.game.Treasure;
 import pirates.game.Pirate;
 import pirates.game.PirateBot;
 import pirates.game.PirateGame;
-/**
- * פוקציות שליחה של פיראטים ליעדים
- * פעולה שמגדירה צעדים
- */
+
 public class MyBot implements PirateBot{
     //General Variables
     private static Debug d;
@@ -21,22 +18,28 @@ public class MyBot implements PirateBot{
     //My Lists
     public List<Treasure> availableTreasures;
     public List<Pirate> availablePirates; //after all set this pirates to the treasure
-    public List<Pirate> attackingPiratesMoving; //moving to the enemy
-    public List<Pirate> attackingPirates; //FIRE
+    public ArrayList<Pirate> attackingPiratesMoving; //moving to the enemy
     public List<Pirate> treasurePirates; //on the way to the base
     public ArrayList<Integer> movesAttacking;
     public ArrayList<Integer> movesToTreasures;
+    public ArrayList<BoardStatusTreasure> boardStatusTreasure;
+    public ArrayList<BoardStatusAttack> boardStatusAttack;
+    public ArrayList<PirateTactics> piratesTactics;
     
     //Classes
     private class BoardStatus {
-        public Pirate Pirate;
-        public Treasure Treasure;
+        public Pirate pirate;
+    }
+    private class BoardStatusTreasure extends BoardStatus{
+        public Treasure treasure;
+    }
+    private class BoardStatusAttack extends BoardStatus{
+        public Pirate enemy;
     }
     private class PirateTactics {
-        public Pirate Pirate;
-        public Location FinalDestination;
-        public Location TempDestination;
-        public int Moves;
+        public Pirate pirate;
+        public Location finalDestination;
+        public Location tempDestination;
     }
     private class Debug {
         private final PirateGame game;
@@ -56,39 +59,56 @@ public class MyBot implements PirateBot{
     public void doTurn(PirateGame game) 
     {
         setAll(game);
-        BoardStatus status = getBoardStatus(game);
-        PirateTactics tactics = toTreasure(game, status);
-        takeAction(game, tactics);
+        for (BoardStatusTreasure bs : boardStatusTreasure) {
+            piratesTactics.add(toTreasure(game, bs));
+        }
+//        for (BoardStatusAttack bs : boardStatusAttack) {
+//            piratesTactics.add(moveToAttack(game, bs));
+//        }
+        //Check Collision HERE!
+        for (PirateTactics pt : piratesTactics ) {
+            takeAction(game, pt);
+        }
     }
     
     //Not finished! ------------------
-    private BoardStatus getBoardStatus(PirateGame game) {
-        BoardStatus status = new BoardStatus();
-//        status.Pirate = game.myPirates().get(0);
-//        status.Treasure = getClosestTreasure(game, status.Pirate, game.treasures());
+    private BoardStatusTreasure getBoardStatusTreasure(PirateGame game, Pirate pirate) {
+        BoardStatusTreasure status = new BoardStatusTreasure();
+        status.pirate = pirate;
+        status.treasure = getClosestTreasure(game, status.pirate, game.treasures());
+        availableTreasures.remove(status.treasure);
         return status;
     }
-    private PirateTactics toTreasure(PirateGame game, BoardStatus status) {
+    private BoardStatusAttack getBoardStatusAttack(PirateGame game, Pirate pirate, Pirate enemy) {
+        BoardStatusAttack status = new BoardStatusAttack();
+        status.enemy = enemy;
+        status.pirate = pirate;
+        return status;
+    }
+    private PirateTactics toTreasure(PirateGame game, BoardStatusTreasure status) {
         PirateTactics tactics = new PirateTactics();
-        tactics.Pirate = status.Pirate;
-        tactics.Moves = game.getActionsPerTurn();
-        if (!tactics.Pirate.hasTreasure()) {
-            tactics.FinalDestination = status.Treasure.getLocation();
+        tactics.pirate = status.pirate;
+        int moves = movesToTreasures.get(0);
+        movesToTreasures.remove(0);
+        if (!tactics.pirate.hasTreasure()) {
+            tactics.finalDestination = status.treasure.getLocation();
         }
         else {
-            tactics.Moves = 1;
-            tactics .FinalDestination = status .Pirate.getInitialLocation();
+            moves = 1;
+            tactics.finalDestination = status.pirate.getInitialLocation();
         }
-        List<Location> possibleLocations = game.getSailOptions( tactics .Pirate,
-        tactics.FinalDestination, tactics.Moves);
-        tactics.TempDestination = possibleLocations.get(0);
-        List<Pirate> inRangePirates = inRangePirates(game, tactics.Pirate);
+        List<Location> possibleLocations = game.getSailOptions(tactics.pirate, tactics.finalDestination, moves);
+        tactics.tempDestination = possibleLocations.get(0);
+        List<Pirate> inRangePirates = inRangePirates(game, tactics.pirate);
         int minDistanceMove = 0;
         //better move
         return tactics ;
     }
+//    private PirateTactics moveToAttack(PirateGame game, BoardStatusAttack status) {
+//        
+//    }
     private void takeAction(PirateGame game, PirateTactics tactics) {
-        game.setSail(tactics.Pirate, tactics.TempDestination);
+        game.setSail(tactics.pirate, tactics.tempDestination);
     }
     // -------------------
     
@@ -99,8 +119,10 @@ public class MyBot implements PirateBot{
             firstTurn = false;
         }
         //Set Lists
-        attackingPirates = game.allMyPirates(); attackingPirates.clear(); //
-        attackingPiratesMoving = game.allMyPirates(); attackingPiratesMoving.clear(); //
+        piratesTactics = new ArrayList<>();
+        attackingPiratesMoving = new ArrayList<>();
+        boardStatusTreasure = new ArrayList<>();
+        boardStatusAttack = new ArrayList<>();
         treasurePirates = game.myPiratesWithTreasures();
         availableTreasures = game.treasures();
         availablePirates = game.mySoberPirates();
@@ -109,17 +131,21 @@ public class MyBot implements PirateBot{
             if(p.isLost())
                 availablePirates.remove(p);
         }
-        //Set Pirates Lists
+        //Set Pirates Lists && attack if in range
         for (Pirate enemyPirate : game.enemyPiratesWithTreasures()) { //set attacking pirates
             Pirate p = getClosestAvailablePirate(game, enemyPirate, availablePirates);
             if(game.InRange(p.getLocation(), enemyPirate.getLocation()))
-                attackingPirates.add(p);
+                game.attack(p, enemyPirate); //attack if in range
             else
                 attackingPiratesMoving.add(p);
+            boardStatusAttack.add(getBoardStatusAttack(game, p, enemyPirate));
             availablePirates.remove(p);
         }
         setMoves(game);
-    }
+        for (Pirate p : availablePirates) {
+            boardStatusTreasure.add(getBoardStatusTreasure(game, p));
+        }
+    } //PirateTactics, Moves, PiratesLists
     private void firstTurn (PirateGame game) {
         d = new Debug(game, showLog);
     }
